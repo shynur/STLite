@@ -1,6 +1,6 @@
 # Mini-Library-of-Template-Containers
 a C++ beginner studies Data Structures by trying to write a mini library of containers<br>
-**很渣, 极虚 的实现; 不过确确实实地编写了数据结构整本书上几乎所有提及的内容**
+**很渣, 极虚 的实现, 连代码风格都不符合我现在的审美; <br>不过确确实实地编写了数据结构整本书上几乎所有提及的内容**
 ____________________
 简单记录一下, 只记录结构和算法方面的.<br>
 像列表会记录最近一次访问的节点的位置这种实现细节就不写了 (但这个功能真的很难实现)...  
