@@ -16,6 +16,8 @@ ____________________
     - bcc 双连通域分解;
     - 拓扑排序
 - 词典 (哈希表)
+    - 闭散列
+    - 平方试探法
     - 除了 load_factor 能维持在 0.5 ~ 1 且保证动态扩缩容的均摊时间和向量一样以外, 被 std::unordered_map 完虐
     - [睿站视频演示](https://www.bilibili.com/video/BV1gZ4y1i7jH?share_source=copy_web)
 - 优先级队列 (完全二叉堆)
