@@ -16,5 +16,5 @@ ____________________
     - [睿站视频演示](https://www.bilibili.com/video/BV1gZ4y1i7jH?share_source=copy_web)
 - 优先级队列 (完全二叉堆)
     - Floyd 原地建堆
-- 二叉搜索树另外写了, 它们的实现是我现在的风格, 不能和这些旧代码放在一起
+- [二叉搜索树另外写了](https://github.com/Shynur/Binary-Search-Tree), 它们的实现是我现在的风格, 不能和这些旧代码放在一起
 - 还有一些简单的算法, 作为类方法或者函数单独存在, 比如八皇后啥的
