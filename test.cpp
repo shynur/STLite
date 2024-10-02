@@ -1,15 +1,22 @@
-#ifndef TEST_CPP
-#define TEST_CPP
+#include "STLite.hpp"
 #include "test.hpp"
 int main() {
     Vector<short> a{};
     List<short> l{};
-    vector<short> b{};
+    std::vector<short> b{};
 
     for (int i{0}, j{}; i < 3000'0000; ++i)
-        j = rand(), a.push(j), l.push(j), b.push_back(j);
-    cout << " heap_sort: " << bench([&] {a.sort("heap");}) << endl
-         << "merge_sort: " << bench([&] {l.sort("merge");}) << endl
-         << " std::sort: " << bench([&] {sort(b.begin(), b.end()), b;}) << endl;
+        j = std::rand(), a.push(j), l.push(j), b.push_back(j);
+
+    std::cout << " heap_sort: " << bench([&] {
+        a.sort("heap");
+    }) << std::endl
+              << "merge_sort: " << bench([&] {
+                     l.sort("merge");
+                 })
+              << std::endl
+              << " std::sort: " << bench([&] {
+                     std::sort(b.begin(), b.end()), b;
+                 })
+              << std::endl;
 }
-#endif
