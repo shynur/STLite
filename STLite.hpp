@@ -1,16 +1,12 @@
 #pragma once
-#include <cstdlib>
 #include <fstream>
-#include <utility>
 #include <iostream>
 #include <filesystem>
-#include <functional>
-#include <type_traits>
-namespace conts {
+namespace stlite {
     class Cont;
     using std::swap;
-    template<typename T> requires(requires(T a, T b) { std::swap(a, b); } == false && std::is_base_of<Cont, T>::value == false)
-    inline void swap(const T& a, const T& b) {}
+    template<typename T> requires(!std::is_base_of<Cont, T>::value && !std::is_swappable_v<T>)
+    void swap(T& a, T& b);
 
     template<typename T1, typename T2> bool operator<(const T1& a, const T2& b);
     template<typename T1, typename T2> inline bool operator<=(const T1& a, const T2& b);
@@ -90,7 +86,7 @@ namespace conts {
         virtual void heap_sort(int lo, int hi) const;
         T& quick_kth(const int& k, const int lo, const int hi) const;
       protected:
-        void copy_constructor(const Sequential& b, int lo, const int hi);
+        void copy_constructor(const Sequential& b, int lo, const int hi) requires(std::is_copy_constructible_v<T>);
         void move_constructor(Sequential&& _b) noexcept;
         void destructor();
         Sequential& dsize(const int det);
@@ -202,7 +198,8 @@ namespace conts {
         Vector& sort(const char* const which, const int lo = 0, const int hi = npos) const;
       public:
         Vector(const char* = nullptr): Sequential{}, elem{*(new Block[1])}, capacity{1} {}
-        Vector(const Sequential& b, const int lo = 0, const int hi = npos): Vector{} { Sequential::copy_constructor(b, lo, hi); }
+        Vector(const Sequential& b, const int lo = 0, const int hi = npos) requires(std::is_copy_constructible_v<T>)
+            : Vector{} { Sequential::copy_constructor(b, lo, hi); }
         Vector(const Vector& b, const int lo = 0, const int hi = npos): Vector{static_cast<const Sequential&>(b), lo, hi} {}
         Vector(Sequential&& _b) noexcept: Vector{} { Sequential::move_constructor(_b); }
         Vector(Vector&& _b) noexcept: Vector{} {
@@ -235,6 +232,7 @@ namespace conts {
         operator const T*() const;
         Vector(const unsigned char* s): Vector{reinterpret_cast<const char*>(s)} {}
     };
+
     using String = Vector<char>;
     using uString = Vector<unsigned char>;
     using BitMap = Vector<bool>;
@@ -260,7 +258,7 @@ namespace conts {
       public:
         slice(): Vector_p{} {}
         slice(const slice& b, const int lo = 0, const int hi = Vector_p::npos): Vector_p{b, lo, hi} {}
-        slice(slice&& _b): Vector_p{static_cast<Vector_p&&>(_b)} {}
+        slice(slice&& _b): Vector_p{std::move(_b)} {}
         template<typename iterable_T> slice(const iterable_T& c, int lo = 0, int hi = ~Vector_p::npos): slice{} {
             for (const auto& e : c)
                 if (0 < lo)
@@ -295,8 +293,8 @@ namespace conts {
             _Node *pleft, *pright;
         };
         struct Node: _Node {
-            Node(_Node& left, T _data, _Node& right): _Node{&left, &right}, _data{static_cast<T&&>(_data)} {}
-            Node(Node&& _b): _Node{static_cast<_Node&&>(_b)}, _data{static_cast<T&&>(_b._data)} {}
+            Node(_Node& left, T _data, _Node& right): _Node{&left, &right}, _data{std::move(_data)} {}
+            Node(Node&& _b): _Node{std::move(_b)}, _data{std::move(_b._data)} {}
             virtual ~Node() override = default;
 
             T _data;
@@ -321,9 +319,10 @@ namespace conts {
         using Sequential::size;
       public:
         List(): Sequential{}, head{nullptr, &tail}, tail{&head, nullptr}, vernier{0, &tail} {}
-        List(const Sequential& b, const int lo = 0, const int hi = npos): List{} { Sequential::copy_constructor(b, lo, hi); }
+        List(const Sequential& b, const int lo = 0, const int hi = npos) requires(std::is_copy_constructible_v<T>)
+            : List{} { Sequential::copy_constructor(b, lo, hi); }
         List(const List& b, const int lo = 0, const int hi = npos): List{static_cast<const Sequential&>(b), lo, hi} {}
-        List(Sequential&& _b) noexcept: List{} { Sequential::move_constructor(static_cast<Sequential&&>(_b)); }
+        List(Sequential&& _b) noexcept: List{} { Sequential::move_constructor(std::move(_b)); }
         List(List&& _b) noexcept: List{} { _b.size() == 0 ? nullptr : (dsize(_b.size()).head.pright = &(_b.at(0)), tail.pleft = &(_b.at(_b.size() - 1)), _b.at(0).pleft = &head, _b.at(size() - 1).pright = &tail, _b.dsize(-_b.size()).head.pright = &(_b.tail), _b.tail.pleft = &(_b.head)); }
         friend void swap(List& a, List& b) {
             if (a.size() == 0 && b.size() == 0)
@@ -389,13 +388,13 @@ namespace conts {
             const struct {
                 const auto& operator=(T data) const {
                     if (auto& this_data{this->data}; this_data.size() == 0)
-                        this_data.push(static_cast<T&&>(data));
+                        this_data.push(std::move(data));
                     else
                         swap(this_data[0], data);
                     return *this;
                 }
                 operator T&() const { return data[0]; }
-                operator T&&() const { return static_cast<T&&>(data[0]); }
+                operator T&&() const { return std::move(data[0]); }
               private:
                 mutable Vector<T> data;
                 bool has_data() const { return data.size() != 0; }
@@ -418,9 +417,9 @@ namespace conts {
                    DISCOVERED,
                    VISITED } state
                 = UNDISCOVERED;
-            Vertex(T data, const int _rank, const Graph<T, typename Edge_T::value_type>& graph): Vector<Edge_T>{}, data{static_cast<T&&>(data)}, parent{Vector<Edge_T>::npos}, priority{~Vector<Edge_T>::npos}, in_degree{0}, _rank{_rank}, pgraph{&graph} {}
+            Vertex(T data, const int _rank, const Graph<T, typename Edge_T::value_type>& graph): Vector<Edge_T>{}, data{std::move(data)}, parent{Vector<Edge_T>::npos}, priority{~Vector<Edge_T>::npos}, in_degree{0}, _rank{_rank}, pgraph{&graph} {}
             Vertex(const Vertex& b): Vector<Edge_T>{b}, data{b.data}, parent{b.parent}, priority{b.priority}, tag1{b.tag1}, tag2{b.tag2}, state{b.state}, in_degree{b.in_degree}, _rank{b.rank()}, pgraph{b.pgraph} {}
-            Vertex(Vertex&& _b) noexcept: Vector<Edge_T>{static_cast<Vector<Edge_T>&&>(_b)}, data{static_cast<T&&>(_b.data)}, parent{_b.parent}, priority{_b.priority}, tag1{_b.tag1}, tag2{_b.tag2}, state{_b.state}, in_degree{_b.in_degree}, _rank{_b.rank()}, pgraph{_b.pgraph} {}
+            Vertex(Vertex&& _b) noexcept: Vector<Edge_T>{std::move(_b)}, data{std::move(_b.data)}, parent{_b.parent}, priority{_b.priority}, tag1{_b.tag1}, tag2{_b.tag2}, state{_b.state}, in_degree{_b.in_degree}, _rank{_b.rank()}, pgraph{_b.pgraph} {}
             friend void swap(Vertex& a, Vertex& b) { swap(static_cast<Vector<Edge_T>&>(a), static_cast<Vector<Edge_T>&>(b)), swap(a.data, b.data), swap(a.parent, b.parent), swap(a.priority, b.priority), swap(a.tag1, b.tag1), swap(a.tag2, b.tag2), swap(a.state, b.state), swap(a.in_degree, b.in_degree), swap(a._rank, b._rank), swap(const_cast<const Graph<T, typename Edge_T::value_type>*&>(a.pgraph), const_cast<const Graph<T, typename Edge_T::value_type>*&>(b.pgraph)); }
 
             bool has_edge_to(const int dest) const;
@@ -475,7 +474,7 @@ namespace conts {
       public:
         Graph() = default;
         Graph(const Graph& b): Vector_v{b}, default_distance{b.default_distance}, clk{b.clk} { update(); }
-        Graph(Graph&& _b) noexcept: Vector_v{static_cast<Vector_v&&>(_b)}, default_distance{_b.default_distance}, clk{_b.clk} { update(); }
+        Graph(Graph&& _b) noexcept: Vector_v{std::move(_b)}, default_distance{_b.default_distance}, clk{_b.clk} { update(); }
         friend void swap(Graph& a, Graph& b) { swap(a.default_distance, b.default_distance), swap(static_cast<Vector_v&>(a), static_cast<Vector_v&>(b)), swap(a.clk, b.clk), a.update(), b.update(); }
         Graph& operator=(Graph b) {
             swap(*this, b);
@@ -487,10 +486,10 @@ namespace conts {
         template<typename F> F& DFS(const F& cref_f, const int u = Vector_v::npos) const;
         template<typename Priority_updater_T> Priority_updater_T& PFS(const Priority_updater_T& cref_pu, const int u = Vector_v::npos) const;
 
-        Vector<auto> Prim(const int u = 0) const;
-        Vector<auto> Dijkstra(const int u = 0) const;
-        Vector<auto> topo_sort(const int v = Vector_v::npos) const;
-        Vector<Vector<auto>> bcc() const;
+        template<typename auto_> Vector<auto_> Prim(const int u = 0) const;
+        Vector<int> Dijkstra(const int u = 0) const;
+        Vector<int> topo_sort(const int v = Vector_v::npos) const;
+        Vector<Vector<int>> bcc() const;
 
         static constexpr const auto VISITED = Vertex::VISITED;
         static constexpr const auto DISCOVERED = Vertex::DISCOVERED;
@@ -516,7 +515,7 @@ namespace conts {
         struct Entry final {
             const K key;
             V val;
-            Entry(const K& k, V v): key{k}, val{static_cast<V&&>(v)} {}
+            Entry(const K& k, V v): key{k}, val{std::move(v)} {}
             bool operator==(const K& b_key) const { return key == b_key; }
             friend bool operator==(const K& a_key, const Entry& b) { return b == a_key; }
         };
@@ -529,7 +528,7 @@ namespace conts {
     template<typename K, typename V> class Hash: public Dictionary<K, V> {
       protected:
         using Dictionary = Dictionary<K, V>;
-        using typename Dictionary::Entry;
+        using Entry = typename Dictionary::Entry;
 
         struct Bucket final {
             bool empty;
@@ -580,7 +579,7 @@ namespace conts {
             for (const auto& [key, val] : b)
                 insert(key, val);
         }
-        Hash(Hash&& _b) noexcept: Dictionary{}, buckets{static_cast<Vector<Bucket>&&>(_b.buckets)}, number_of_used_buckets{_b.number_of_used_buckets} { _b.dsize(-dsize(_b.size()).size()).number_of_used_buckets = 0; }
+        Hash(Hash&& _b) noexcept: Dictionary{}, buckets{std::move(_b.buckets)}, number_of_used_buckets{_b.number_of_used_buckets} { _b.dsize(-dsize(_b.size()).size()).number_of_used_buckets = 0; }
         friend void swap(Hash& a, Hash& b) { swap(a.dsize(-b.dsize(-a.dsize(b.size()).size()).dsize(-b.size() * 2).size()).buckets, b.buckets), swap(a.number_of_used_buckets, b.number_of_used_buckets); }
         Hash& operator=(Hash b) {
             swap(*this, b);
@@ -650,24 +649,24 @@ namespace conts {
         virtual T deque() noexcept(false) override;
         virtual const T& front() const noexcept(false) override;
     };
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for Heap */
 
     template<typename T> CHeap<T> CHeap<T>::Floyd(Vector<T>& to_heapify) {
-        CHeap heapified{false, static_cast<Vector<T>&&>(to_heapify)};
+        CHeap heapified{false, std::move(to_heapify)};
         for (int hi{heapified.size() - 1}; hi >= 0; --hi)
             heapified.percolate_down(hi);
         return heapified;
     }
     template<typename T> CHeap<T>& CHeap<T>::percolate_up() const {
-        for (int child{size() - 1}, parent{parent_of(child)}; parent >= 0; swap((*this)[child], (*this)[parent]), parent = parent_of(child = parent))
+        for (int child = size() - 1, parent = parent_of(child); parent >= 0; swap((*this)[child], (*this)[parent]), parent = parent_of(child = parent))
             if ((*this)[child] >= (*this)[parent])
                 break;
         return const_cast<CHeap&>(*this);
     }
     template<typename T> void CHeap<T>::percolate_down(int parent) const {
-        const int siz{size()};
+        const int siz = size();
         const auto right_is_better{[&siz](const int& parent) -> int {
             int rchild{right_child_of(parent)};
             return rchild != siz ? rchild : --rchild;
@@ -681,7 +680,7 @@ namespace conts {
                 swap(parent_elem, rchild_elem), parent = rchild;
     }
 
-    template<typename T> CHeap<T>& CHeap<T>::enque(T e) { return static_cast<CHeap&>(Vector<T>::push(static_cast<T&&>(e))).percolate_up(); }
+    template<typename T> CHeap<T>& CHeap<T>::enque(T e) { return static_cast<CHeap&>(Vector<T>::push(std::move(e))).percolate_up(); }
     template<typename T> const T& CHeap<T>::front() const noexcept(false) { return at(0); }
     template<typename T> T CHeap<T>::deque() noexcept(false) {
         T to_deque{(swap((*this)[0], (*this)[size() - 1]), Vector<T>::pop())};
@@ -700,7 +699,7 @@ namespace conts {
     }
 
     template<typename T> bool CHeap<T>::operator<(const CHeap& b) const { return Vector<T>::operator<(static_cast<const Vector<T>&>(b)); }
-    template<typename T> CHeap<T>::CHeap(const bool _, Vector<T>&& _b): Vector<T>{static_cast<Vector<T>&&>(_b)} {}
+    template<typename T> CHeap<T>::CHeap(const bool _, Vector<T>&& _b): Vector<T>{std::move(_b)} {}
     template<typename T> auto CHeap<T>::begin() const {
         struct iterator {
             const CHeap& heap;
@@ -711,19 +710,19 @@ namespace conts {
                 ++i;
                 return *this;
             }
-            const T& operator*() const { return heap.at(i); }
+            const T& operator*() const { return /* We should use ‘heap.at(i)’ instead, but clangd will complain. */ heap[i]; }
         } beg{*this, 0};
         return beg;
     }
     template<typename T> auto CHeap<T>::end() const -> decltype(begin()) {
-        auto beg{begin()};
+        auto beg = begin();
         while (beg.i != size())
             ++(beg.i);
         return beg;
     }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for Hash */
 
     template<typename K, typename V> Hash<K, V>& Hash<K, V>::insert(const K& key, V val) {
@@ -733,7 +732,7 @@ namespace conts {
             int location{};
             for (int hit{(is_scaling ? *this : scale()).MAD(key)}, sq_base{0}; buckets[location = locate(hit, sq_base)].empty == false; ++sq_base)
                 ;
-            buckets[location].push(key, static_cast<V&&>(val)), ++dsize(1).number_of_used_buckets;
+            buckets[location].push(key, std::move(val)), ++dsize(1).number_of_used_buckets;
         }
         return *this;
     }
@@ -749,7 +748,7 @@ namespace conts {
     template<typename K, typename V> Dictionary<K, V>::Entry Hash<K, V>::pick(const K& key) noexcept(false) {
         auto [k, v]{buckets[find(key)].pop()};
         dsize(-1).scale();
-        return {k, static_cast<V&&>(v)};
+        return {k, std::move(v)};
     }
 
     template<typename K, typename V> int Hash<K, V>::MAD(const K& key) const {
@@ -774,7 +773,7 @@ namespace conts {
         for (auto& bucket : old_buckets)
             if (bucket.empty == false) {
                 auto [key, val]{bucket.pop()};
-                const_cast<Hash*>(this)->insert(key, static_cast<V&&>(val));
+                const_cast<Hash*>(this)->insert(key, std::move(val));
             }
         return is_scaling = false, const_cast<Hash&>(*this);
     }
@@ -800,22 +799,22 @@ namespace conts {
     template<typename K, typename V> bool Hash<K, V>::Bucket::brand_new() const { return ptr_entry == nullptr; }
     template<typename K, typename V> Hash<K, V>::Bucket& Hash<K, V>::Bucket::push(const K& key, V val) {
         if (brand_new())
-            ptr_entry = new Entry{key, static_cast<V&&>(val)};
+            ptr_entry = new Entry{key, std::move(val)};
         else if (empty)
-            ptr_entry->~auto(), new (ptr_entry) Entry{key, static_cast<V&&>(val)};
+            std::destroy_at(ptr_entry), new (ptr_entry) Entry{key, std::move(val)};
         else
-            pop(), push(key, static_cast<V&&>(val));
+            pop(), push(key, std::move(val));
         empty = false;
         return *this;
     }
     template<typename K, typename V> Dictionary<K, V>::Entry Hash<K, V>::Bucket::pop() {
         empty = true;
-        return {ptr_entry->key, static_cast<V&&>(ptr_entry->val)};
+        return {ptr_entry->key, std::move(ptr_entry->val)};
     }
     template<typename K, typename V> int Hash<K, V>::Bucket::hash() const { return hasher<bool>{}(empty) ^ hasher<Entry*>{}(ptr_entry); }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for Graph */
 
     template<typename vertex_data_T, typename T> bool component_of_graph::Edge<vertex_data_T, T>::has_data() const { return data.has_data(); }
@@ -876,7 +875,7 @@ namespace conts {
         if (has_edge_to(edge.dest()))
             return swap((*this)(edge.dest()), edge), *this;
         else
-            return static_cast<Vertex&>(Vector<Edge_T>::push(static_cast<Edge_T&&>(edge)));
+            return static_cast<Vertex&>(Vector<Edge_T>::push(std::move(edge)));
     }
     template<typename T, typename Edge_T> bool component_of_graph::Vertex<T, Edge_T>::cyclic() const {
         Vector<int> visited{};
@@ -1046,7 +1045,7 @@ namespace conts {
         }
     }
 
-    template<typename vertex_data_T, typename edge_data_T> Vector<auto> Graph<vertex_data_T, edge_data_T>::Prim(const int u) const {
+    template<typename vertex_data_T, typename edge_data_T> template<typename auto_> Vector<auto_> Graph<vertex_data_T, edge_data_T>::Prim(const int u) const {
         const auto prim_alg{[this](const int u, const int v) {
             if (Vertex & dest{(*this)[v]}; dest.state == UNDISCOVERED && (*this)[u](v).dist < dest.priority)
                 dest.priority = (*this)[u](v).dist, dest.parent = u;
@@ -1104,7 +1103,7 @@ namespace conts {
                 simplified = true;
             } while (!simplified);
         }
-        return static_cast<Vector<int>&&>(dfs.reversed.reverse());
+        return std::move(dfs.reversed.reverse());
     }
     template<typename vertex_data_T, typename edge_data_T> Vector<Vector<int>> Graph<vertex_data_T, edge_data_T>::bcc() const {
         const struct {
@@ -1133,31 +1132,31 @@ namespace conts {
                 do
                     few_vertices.push(vertices.pop());
                 while (few_vertices[few_vertices.size() - 1] != v);
-                vertices.push(v), components.push(static_cast<Vector<int>&&>(few_vertices));
+                vertices.push(v), components.push(std::move(few_vertices));
             }
         } dfs{undirect().reset(), clk};
         for (auto& vertex : *this)
             if (clk = 0; vertex.state == UNDISCOVERED)
                 vertex.odeg() == 0 ? (dfs.components.push(Vector<int>{}.push(vertex.rank())), vertex.state = DISCOVERED) : (vertex.tag2 = Vector_v::npos, dfs(vertex), 0);
-        return static_cast<Vector<Vector<int>>&&>(dfs.components);
+        return std::move(dfs.components);
     }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for List */
 
     template<typename T> auto& List<T>::_Node::insert_at(_Node& inserted_at) {
         if (_Node _{nullptr, nullptr}; this == &inserted_at && pright == &inserted_at)
             return static_cast<Node&>(*this);
         else
-            return (new (&_) _Node{pleft, pright})->~auto(), (new (&_) _Node{inserted_at.pleft, this})->~auto(), (new (&_) _Node{this, &inserted_at})->~auto(), static_cast<Node&>(*this);
+            return std::destroy_at(new (&_) _Node{pleft, pright}), std::destroy_at(new (&_) _Node{inserted_at.pleft, this}), std::destroy_at(new (&_) _Node{this, &inserted_at}), static_cast<Node&>(*this);
     }
     template<typename T> T& List<T>::_Node::data() { return static_cast<Node&>(*this)._data; }
 
     template<typename T> List<T>::~List() { Sequential::destructor(); }
 
     template<typename T> List<T>::_Node& List<T>::at(const int i) const {
-        if (static const constexpr int divisor{4}; i <= size() / divisor)
+        if (constexpr int divisor{4}; i <= size() / divisor)
             return *(decltype(vernier){-1, &const_cast<_Node&>(head)}.go(i + 1).p);
         else if (size() / divisor <= i)
             return *(decltype(vernier){size(), &const_cast<_Node&>(tail)}.go(i - size()).p);
@@ -1168,26 +1167,26 @@ namespace conts {
     template<typename T> List<T>& List<T>::operator=(List b) { return swap(*this, b), *this; }
 
     template<typename T> T& List<T>::operator[](const int i) const noexcept(false&& noexcept(Sequential::operator[])) { return (at((0 <= i && i < size()) ? i : throw "List_not[0,size)")).data(); }
-    template<typename T> List<T>& List<T>::push(T e) { return vernier.rank < size() ? vernier : (vernier = {size(), &tail}).go(-1), new Node{at(size() - 1), static_cast<T&&>(e), tail}, dsize(1); }
+    template<typename T> List<T>& List<T>::push(T e) { return vernier.rank < size() ? vernier : (vernier = {size(), &tail}).go(-1), new Node{at(size() - 1), std::move(e), tail}, dsize(1); }
     template<typename T> T List<T>::pop() noexcept(noexcept(operator[](0))) {
-        T to_pop{static_cast<T&&>((*this)[size() - 1])};
+        T to_pop{std::move((*this)[size() - 1])};
         vernier.rank < (size() - 1) ? vernier : (vernier = {size(), &tail}).go(-2), delete dsize(-1).tail.pleft;
         return to_pop;
     }
     template<typename T> T List<T>::deque() noexcept(noexcept(operator[](0))) {
-        T to_dequeue{static_cast<T&&>((*this)[0])};
+        T to_dequeue{std::move((*this)[0])};
         --(0 < vernier.rank ? vernier : (vernier = {-1, &head}).go(2)).rank, delete dsize(-1).head.pright;
         return to_dequeue;
     }
 
     template<typename T> bool List<T>::operator<(const List& b) const { return *this < static_cast<const Sequential&>(b); }
 
-    template<typename T> List<T>& List<T>::insert(const int i, T e) { return insert(at(i), static_cast<T&&>(e), i); }
-    template<typename T> List<T>& List<T>::insert(_Node& node_i, T e, const int i) { return i == npos ? (vernier = {-1, &head}).rank : (vernier.rank < i ? 0 : ++vernier.rank), new Node{*(node_i.pleft), static_cast<T&&>(e), node_i}, dsize(1); }
+    template<typename T> List<T>& List<T>::insert(const int i, T e) { return insert(at(i), std::move(e), i); }
+    template<typename T> List<T>& List<T>::insert(_Node& node_i, T e, const int i) { return i == npos ? (vernier = {-1, &head}).rank : (vernier.rank < i ? 0 : ++vernier.rank), new Node{*(node_i.pleft), std::move(e), node_i}, dsize(1); }
     template<typename T> T List<T>::pick(const int i) { return pick(at(i), i); }
     template<typename T> T List<T>::pick(_Node& node_i, const int i) {
-        T to_pick{static_cast<T&&>(node_i.data())};
-        return i == npos ? (vernier = {-1, &head}).rank : (vernier.rank < i ? 0 : (vernier.rank == i ? vernier.go(-1).rank : --vernier.rank)), delete &node_i, static_cast<T&&>(to_pick);
+        T to_pick{std::move(node_i.data())};
+        return i == npos ? (vernier = {-1, &head}).rank : (vernier.rank < i ? 0 : (vernier.rank == i ? vernier.go(-1).rank : --vernier.rank)), delete &node_i, std::move(to_pick);
     }
 
     template<typename T> void List<T>::merge_sort(const int lo, const int hi) const {
@@ -1215,8 +1214,8 @@ namespace conts {
         }
     }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for slice */
 
     template<typename T> slice<T>& slice<T>::operator=(slice b) { return swap(*this, b), *this; }
@@ -1229,8 +1228,8 @@ namespace conts {
     template<typename T> bool slice<T>::operator<(const slice& b) const { return *this < static_cast<const Vector_p&>(b); }
     template<typename T> auto_deref::AutoDeref<T>& slice<T>::operator[](const int i) const noexcept(noexcept(Vector_p::operator[])) { return Vector_p::operator[](i); }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for Vector */
 
     template<typename T> Vector<T>& Vector<T>::dsize(const int det) { return dynamic_cast<Vector&>(Sequential::dsize(det)); }
@@ -1244,7 +1243,7 @@ namespace conts {
         if ((!(capacity / 4 <= size() && size() < capacity)) && capacity != 0) {
             T* new_elem{size() == capacity ? *(new Block[capacity *= 2]) : *(new Block[capacity /= 2])};
             for (int lo{0}, hi{size()}; lo < hi; ++lo)
-                new (new_elem + lo) T{static_cast<T&&>((*this)[lo])};
+                new (new_elem + lo) T{std::move((*this)[lo])};
             Block::del(destruct(0, size()).elem) = new_elem;
         }
         return *this;
@@ -1255,11 +1254,11 @@ namespace conts {
 
     template<typename T> T& Vector<T>::operator[](const int i) const noexcept(false&& noexcept(Sequential::operator[])) { return elem[(0 <= i && i < size()) ? i : throw "Vector_[size,+infinity)"]; }
     template<typename T> Vector<T>& Vector<T>::push(T e) {
-        scale(), new (&dsize(1)[size() - 1]) T{static_cast<T&&>(e)};
+        scale(), new (&dsize(1)[size() - 1]) T{std::move(e)};
         return *this;
     }
     template<typename T> T Vector<T>::pop() noexcept(noexcept(operator[](0))) {
-        T to_pop{static_cast<T&&>((*this)[size() - 1])};
+        T to_pop{std::move((*this)[size() - 1])};
         destruct(size() - 1).dsize(-1).scale();
         return to_pop;
     }
@@ -1274,7 +1273,7 @@ namespace conts {
     }
     template<typename T> Vector<T>::operator const T*() const { return (const_cast<Vector*>(this)->scale()).elem; }
 
-    template<typename T> Vector<T>& Vector<T>::insert(const int i, T e) { return dynamic_cast<Vector&>(Sequential::insert(i, static_cast<T&&>(e))); }
+    template<typename T> Vector<T>& Vector<T>::insert(const int i, T e) { return dynamic_cast<Vector&>(Sequential::insert(i, std::move(e))); }
     template<typename T> Vector<T>& Vector<T>::pick(const int lo, const int hi) { return dynamic_cast<Vector&>(Sequential::pick(lo, hi)); }
     template<typename T> Vector<T>& Vector<T>::shuffle(const int lo, const int hi) const { return dynamic_cast<Vector&>(Sequential::shuffle(lo, hi)); }
     template<typename T> Vector<T>& Vector<T>::reverse(const int lo, const int hi) const { return dynamic_cast<Vector&>(Sequential::reverse(lo, hi)); }
@@ -1284,7 +1283,7 @@ namespace conts {
         if (Vector & this_vec{const_cast<Vector&>(*this)}; lo != 0 || hi != size())
             Sequential::heap_sort(lo, hi);
         else {
-            CHeap<T> heap{static_cast<Vector&&>(this_vec)};
+            CHeap<T> heap{std::move(this_vec)};
             for (this_vec = {}; heap.size() != 0;)
                 this_vec.push(heap.deque());
         }
@@ -1348,8 +1347,8 @@ namespace conts {
         int as_int() const;
     };
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for BitMap */
 
     bool BitMap::iterator::operator!=(const iterator& b) const { return i != b.i; }
@@ -1462,14 +1461,15 @@ namespace conts {
         return number;
     }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for Sequential */
 
-    template<typename T> void Sequential<T>::copy_constructor(const Sequential& b, int lo, const int hi) {
-        if constexpr (requires(const T& copyable) { new T{copyable}; })
-            for (b.npos_off(hi); lo < hi; ++lo)
-                push(b[lo]);
+    template<typename T>
+    void Sequential<T>::copy_constructor(const Sequential& b, int lo, const int hi) requires(std::is_copy_constructible_v<T>)
+    {
+        for (b.npos_off(hi); lo < hi; ++lo)
+            push(b[lo]);
     }
     template<typename T> void Sequential<T>::move_constructor(Sequential&& _b) noexcept { swap(*this, static_cast<Sequential&>(_b)); }
     template<typename T> void Sequential<T>::destructor() { pick(0, size()); }
@@ -1487,13 +1487,13 @@ namespace conts {
     }
 
     template<typename T> Sequential<T>& Sequential<T>::insert(int i, T e) {
-        i <= size() ? push(static_cast<T&&>(e)) : throw "insert in (size,+infinity)";
+        i <= size() ? push(std::move(e)) : throw "insert in (size,+infinity)";
         while (i < size())
             swap((*this)[i++], (*this)[size() - 1]);
         return *this;
     }
     template<typename T> T Sequential<T>::pick(const int i) {
-        T to_pick{static_cast<T&&>((*this)[i])};
+        T to_pick{std::move((*this)[i])};
         pick(i, i + 1);
         return to_pick;
     }
@@ -1610,7 +1610,7 @@ namespace conts {
                 (*this)[i] <= (*this)[i + 1] ? 0 : (swap((*this)[i], (*this)[i + 1]), already_sorted = false);
     }
     template<typename T> void Sequential<T>::merge_sort(int lo, const int hi) const {
-        if (static const constexpr auto _f{[]() {}}; hi - lo <= 2)
+        if (constexpr auto _f{[]() {}}; hi - lo <= 2)
             return (hi - lo == 2 && (*this)[lo] > (*this)[lo + 1]) ? swap((*this)[lo], (*this)[lo + 1]) : _f();
         int mi{(lo + hi) / 2};
         const auto hand_shaker{(merge_sort(lo, mi), merge_sort(mi, hi), [this](int& lo, int& mi, const int hi) {
@@ -1713,23 +1713,23 @@ namespace conts {
             const T& operator()(const int k, slice<T> input) const {
                 Vector<slice<T>> sections{};
                 for (int head{0}, input_size{input.size()}; head < input_size; head += section_len)
-                    sections.push(static_cast<slice<T>&&>(slice<T>{input, head, head + ((head + section_len <= input_size) ? section_len : (input_size - head))}.sort("quick")));
+                    sections.push(std::move(slice<T>{input, head, head + ((head + section_len <= input_size) ? section_len : (input_size - head))}.sort("quick")));
                 if (sections.size() == 1)
                     return sections[0][k];
                 slice<T>& medians{input = {}};
                 for (const auto& section : sections)
                     medians.push(section[section.size() / 2]);
-                const T& median_of_medians{(*this)(medians.size() / 2, static_cast<slice<T>&&>(medians))};
+                const T& median_of_medians{(*this)(medians.size() / 2, std::move(medians))};
                 slice<T> less_than_median{}, &equal_to_median{medians = {}}, greater_than_median{};
                 for (const auto& section : sections)
                     for (const T& e : section)
                         (e == median_of_medians ? equal_to_median : (e < median_of_medians ? less_than_median : greater_than_median)).push(e);
                 if (sections = {}; k < less_than_median.size())
-                    return (*this)(k, static_cast<slice<T>&&>(less_than_median));
+                    return (*this)(k, std::move(less_than_median));
                 else if (const int cnt_less{less_than_median.size()}, cnt_equal{equal_to_median.size()}; k < cnt_less + cnt_equal)
                     return median_of_medians;
                 else
-                    return (*this)(k - (cnt_less + cnt_equal), static_cast<slice<T>&&>(greater_than_median));
+                    return (*this)(k - (cnt_less + cnt_equal), std::move(greater_than_median));
             }
         } BFPRT{section_len};
         return const_cast<T&>(BFPRT(k, *this));
@@ -1780,8 +1780,8 @@ namespace conts {
         return pattern_i == pattern.size() ? (lo - pattern_i) : npos;
     }
 
-} // namespace conts
-namespace conts {
+} // namespace stlite
+namespace stlite {
     /* impl for Cont */
 
     Cont& Cont::dsize(const int det) noexcept(false) {
@@ -1799,7 +1799,7 @@ namespace conts {
     [[nodiscard("information is delivered in form of const char *, but std::ios_base")]] const char* Cont::info(const char* const which) {
         switch (option(which)) {
             [[likely]] default:
-                return "class Cont, in namespace conts, by Shynur <one.last.kiss@qq.com> <Shynur@foxmail.com> 2022. ";
+                return "class Cont, in namespace stlite, by shynur <shynur@outlook.com> 2022-2024.";
         }
     }
     bool Cont::operator<(const Cont& b) const { return size() < b.size(); }
@@ -1808,19 +1808,15 @@ namespace conts {
 
     namespace utilities {}
     namespace safely {}
-} // namespace conts
-namespace std {
+} // namespace stlite
 
-    template<typename T> struct hash<::conts::Sequential<T>>: ::conts::hasher<::conts::Sequential<T>> {};
-    template<typename T> struct hash<::conts::Vector<T>>: hash<::conts::Sequential<T>> {};
-    template<typename T> struct hash<::conts::List<T>>: hash<::conts::Sequential<T>> {};
+template<typename T> struct std::hash<stlite::Sequential<T>>: stlite::hasher<stlite::Sequential<T>> {};
+template<typename T> struct std::hash<stlite::Vector<T>>: hash<stlite::Sequential<T>> {};
+template<typename T> struct std::hash<stlite::List<T>>: hash<stlite::Sequential<T>> {};
+template<typename Vertex_data_T, typename Edge_data_T> struct std::hash<stlite::Graph<Vertex_data_T, Edge_data_T>>: stlite::hasher<stlite::Graph<Vertex_data_T, Edge_data_T>> {};
+template<> struct std::hash<stlite::BitMap>: stlite::hasher<stlite::BitMap> {};
 
-    template<typename Vertex_data_T, typename Edge_data_T> struct hash<::conts::Graph<Vertex_data_T, Edge_data_T>>: ::conts::hasher<::conts::Graph<Vertex_data_T, Edge_data_T>> {};
-
-    template<> struct hash<::conts::BitMap>: ::conts::hasher<::conts::BitMap> {};
-
-} // namespace std
-namespace conts {
+namespace stlite {
     /* impl for some utilities */
 
     template<typename T1, typename T2> bool operator<(const T1& a, const T2& b) { return b > a; }
@@ -1829,12 +1825,10 @@ namespace conts {
     template<typename T1, typename T2> inline bool operator>(const T1& a, const T2& b) { return !(b >= a); }
     template<typename T1, typename T2> bool operator==(const T1& a, const T2& b) { return a <= b && a >= b; }
     template<typename T1, typename T2> inline bool operator!=(const T1& a, const T2& b) { return !(a == b); }
-    template<typename T1, typename T2> inline T1 operator+(T1 a, T2 b) { return a += static_cast<T2&&>(b); }
+    template<typename T1, typename T2> inline T1 operator+(T1 a, T2 b) { return a += std::move(b); }
 
-} // namespace conts
-#include <string>
-#include <iostream>
-namespace conts::utilities {
+} // namespace stlite
+namespace stlite::utilities {
     template<typename cont_T> constexpr bool is_Cont() { return std::is_base_of<Cont, cont_T>::value; }
     template<typename cont_T> using val_t = std::remove_cvref_t<decltype(*(cont_T{}.begin()))>;
 
@@ -1854,44 +1848,7 @@ namespace conts::utilities {
     inline uString as_uString(const std::string& std_s) { return static_cast<const char*>(as_String(std_s)); }
 
     String convert(unsigned num, const unsigned char base = 16) {
-        static constexpr const char symbols[]{
-            '0',
-            '1',
-            '2',
-            '3',
-            '4',
-            '5',
-            '6',
-            '7',
-            '8',
-            '9',
-            'A',
-            'B',
-            'C',
-            'D',
-            'E',
-            'F',
-            'G',
-            'H',
-            'I',
-            'J',
-            'K',
-            'L',
-            'M',
-            'N',
-            'O',
-            'P',
-            'Q',
-            'R',
-            'S',
-            'T',
-            'U',
-            'V',
-            'W',
-            'X',
-            'Y',
-            'Z',
-        };
+        static constexpr const char symbols[]{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'};
         base <= sizeof(symbols) / sizeof(symbols[0]) ? 0 : (std::cerr << "base converted to must be in [2,36]\n", 0);
         String number_sequen{};
         Vector<unsigned char> inv_number_sequen{};
@@ -1907,27 +1864,6 @@ namespace conts::utilities {
         for (unsigned hi{0}; hi < number_sequen.size(); ++hi)
             (num *= base) += number_sequen[hi] - (number_sequen[hi] <= '9' ? '0' : ((number_sequen[hi] <= 'Z' ? 'A' : 'a') - 10));
         return num;
-    }
-
-    Vector<unsigned> eight_queens(const unsigned n = 8) {
-        n >= 4 ? 0 : (std::cerr << "n < 4 in eight(N)_queens-problem\n", 0);
-        struct Queen final {
-            const unsigned &n, x, y;
-            bool operator==(const Queen& b) const { return x == b.x || y == b.y || x + y == b.x + b.y || x + b.y == b.x + y; }
-            Queen(const unsigned x, const unsigned y, const unsigned& n): n{n}, x{x}, y{y} {}
-        };
-        Vector<Queen> queens{};
-        queens.push({1, 1, n});
-        for (unsigned x{1}, y{2}; y <= n; x <= n ? (++y, x = 1) : (--y, x = queens.pop().x + 1))
-            for (; x <= n; ++x)
-                if (Queen queen{x, y, n}; queens.find(queen) < 0) {
-                    queens.push(queen);
-                    break;
-                }
-        Vector<unsigned> ans{};
-        while (queens.size() != 0)
-            ans.push(queens.pop().x);
-        return ans;
     }
 
     bool prime(const unsigned number) {
@@ -1951,8 +1887,8 @@ namespace conts::utilities {
                         sifter[j] = false;
         return true;
     }
-} // namespace conts::utilities
-namespace conts::safely {
+} // namespace stlite::utilities
+namespace stlite::safely {
     using utilities::is_Cont;
     using utilities::val_t;
 
@@ -1960,18 +1896,17 @@ namespace conts::safely {
     using utilities::as_String;
     using utilities::as_uString;
     using utilities::convert;
-    using utilities::eight_queens;
     using utilities::prime;
 
-    using conts::Vector;
-    template<typename T> using slice [[deprecated("slice which is only be impl for slice-semantic cannot perform most algorithms")]] = conts::slice<T>;
-    using conts::String;
-    using conts::uString;
-    using conts::BitMap;
-    using conts::List;
-    using conts::Graph;
-    using conts::Hash;
-    using conts::CHeap;
+    using stlite::Vector;
+    template<typename T> using slice [[deprecated("slice which is only be impl for slice-semantic cannot perform most algorithms")]] = stlite::slice<T>;
+    using stlite::String;
+    using stlite::uString;
+    using stlite::BitMap;
+    using stlite::List;
+    using stlite::Graph;
+    using stlite::Hash;
+    using stlite::CHeap;
 
     constexpr auto npos = Cont::npos;
     constexpr auto VISITED = Graph<char, char>::VISITED;
@@ -1982,5 +1917,5 @@ namespace conts::safely {
     constexpr auto FORWARD = Graph<char, char>::FORWARD;
     constexpr auto BACKWARD = Graph<char, char>::BACKWARD;
     constexpr auto UNDETERMINED = Graph<char, char>::UNDETERMINED;
-} // namespace conts::safely
-using namespace conts::safely;
+} // namespace stlite::safely
+using namespace stlite::safely;
